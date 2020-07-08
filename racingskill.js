@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Racing Skill Display
-// @namespace    https://github.com/sulsay/torn
+// @namespace    https://github.com/zim312/raceskill
 // @version      0.0.1
 // @description  Shows the racing skill of drivers in your race as long as they have this script installed as well
 // @originalauthor       Sulsay [2173590]
