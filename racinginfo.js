@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Torn: Racing enhancements modz by zim312
-// @namespace    lugburz.racing_enhancements
+// @namespace    lugburz.racing_enhancements2
 // @version      0.0.1
 // @description  Show car's current speed, precise skill, official race penalty.
 // @author       Lugburz
