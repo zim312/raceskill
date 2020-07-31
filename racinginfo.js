@@ -6,7 +6,7 @@
 // @author       Lugburz
 // @match        https://www.torn.com/*
 // @require      https://github.com/f2404/torn-userscripts/raw/31f4faa6da771b7a16cf732c1a78970506effeeb/lib/lugburz_lib.js
-// @updateURL    https://github.com/f2404/torn-userscripts/raw/master/racing_show_speed.user2.js
+// @updateURL    https://github.com/zim312/raceskill/blob/master/racinginfo.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_notification
