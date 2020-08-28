@@ -1,11 +1,10 @@
 // ==UserScript==
 // @name         Torn: Racing enhancements modz by zim312
-// @namespace    lugburz.racing_enhancements2
-// @version      0.0.1
+// @namespace    lugburz.racing_enhancements
+// @version      0.0.3
 // @description  Show car's current speed, precise skill, official race penalty.
 // @author       Lugburz
 // @match        https://www.torn.com/*
-// @require      https://github.com/f2404/torn-userscripts/raw/31f4faa6da771b7a16cf732c1a78970506effeeb/lib/lugburz_lib.js
 // @updateURL    https://github.com/zim312/raceskill/blob/master/racinginfo.js
 // @grant        GM_setValue
 // @grant        GM_getValue
@@ -26,7 +25,7 @@ const SHOW_SPEED = GM_getValue('showSpeedChk') != 0;
 // Whether to share racing skill
 const SHARE_RS = GM_getValue('shareSkill') != 0;
 
-const arsonBaseApiUrl = 'https://cs.etmc.org/torn/api/v1';
+const arsonBaseApiUrl = 'https://zntc.tk/api/v1';
 const racingSkillCacheByDriverId = new Map();
 
 
@@ -34,6 +33,76 @@ var period = 1000;
 var last_compl = -1.0;
 var x = 0;
 var penaltyNotif = 0;
+
+function ajax(callback) {
+    $(document).ajaxComplete((event, xhr, settings) => {
+        if (xhr.readyState > 3 && xhr.status == 200) {
+            let url = settings.url;
+            if (url.indexOf("torn.com/") < 0) url = "torn.com" + (url.startsWith("/") ? "" : "/") + url;
+            const page = url.substring(url.indexOf("torn.com/") + "torn.com/".length, url.indexOf(".php"));
+
+            callback(page, xhr, settings);
+        }
+    });
+}
+
+function pad(num, size) {
+    return ('000000000' + num).substr(-size);
+}
+
+function formatTime(date) {
+    return pad(date.getUTCHours(), 2) + ':' + pad(date.getUTCMinutes(), 2) + ':' + pad(date.getUTCSeconds(), 2);
+}
+
+function formatTimeMsec(msec) {
+    const hours = Math.floor((msec % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((msec % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((msec % (1000 * 60)) / 1000);
+    const mseconds = Math.floor(msec % 1000);
+    return (hours > 0 ? hours + ":" : '') + (hours > 0 || minutes > 0 ? pad(minutes, 2) + ":" : '') + pad(seconds, 2) + "." + pad(mseconds, 3);
+}
+
+function formatTimeSecWithLetters(msec) {
+    const hours = Math.floor((msec % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((msec % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((msec % (1000 * 60)) / 1000);
+
+    return (hours > 0 ? hours + "h " : '') + (hours > 0 || minutes > 0 ? minutes + "m " : '') + seconds + "s";
+}
+
+function decode64(input) {
+    var output = '';
+    var chr1, chr2, chr3 = '';
+    var enc1, enc2, enc3, enc4 = '';
+    var i = 0;
+    var keyStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    var base64test = /[^A-Za-z0-9\+\/\=]/g;
+    if (base64test.exec(input)) {
+        console.log('There were invalid base64 characters in the input text.\n' +
+                    'Valid base64 characters are A-Z, a-z, 0-9, \'+\', \'/\',and \'=\'\n' +
+                    'Expect errors in decoding.');
+    }
+    input = input.replace(/[^A-Za-z0-9\+\/\=]/g, '');
+    do {
+        enc1 = keyStr.indexOf(input.charAt(i++));
+        enc2 = keyStr.indexOf(input.charAt(i++));
+        enc3 = keyStr.indexOf(input.charAt(i++));
+        enc4 = keyStr.indexOf(input.charAt(i++));
+        chr1 = (enc1 << 2) | (enc2 >> 4);
+        chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+        chr3 = ((enc3 & 3) << 6) | enc4;
+        output = output + String.fromCharCode(chr1);
+        if (enc3 != 64) {
+            output = output + String.fromCharCode(chr2);
+        }
+        if (enc4 != 64) {
+            output = output + String.fromCharCode(chr3);
+        }
+        chr1 = chr2 = chr3 = '';
+        enc1 = enc2 = enc3 = enc4 = '';
+    } while (i < input.length);
+    return unescape(output);
+}
 
 function maybeClear() {
     if (x != 0 ) {
@@ -70,6 +139,33 @@ function watchForDriversListContentChanges(driversList) {
     // The content of #leaderBoard is rebuilt periodically so watch for changes:
     new MutationObserver(insertRacingSkillsIntoCurrentDriversList).observe(driversList, {childList: true});
     driversList.dataset.hasWatcher = 'true';
+}
+
+async function getRacingSkillForDrivers(driverIds) {
+    const driverIdsToFetchSkillFor = driverIds.filter(driverId => ! racingSkillCacheByDriverId.has(driverId));
+    if (driverIdsToFetchSkillFor.length > 0) {
+        const skills = await fetchRacingSkillForDrivers(driverIdsToFetchSkillFor);
+        for (let [driverId, skill] of Object.entries(skills)) {
+            racingSkillCacheByDriverId.set(+driverId, skill);
+        }
+    }
+
+    const resultHash = {};
+    for (let driverId of driverIds) {
+        resultHash[driverId] = racingSkillCacheByDriverId.get(driverId);
+    }
+    return resultHash;
+}
+
+    
+
+function getUserIdFromCookie() {
+    const userIdString = document.cookie.split(';')
+        .map(entry => entry.trim())
+        .find(entry => entry.indexOf('uid=') === 0)
+        .replace('uid=', '');
+
+    return parseInt(userIdString, 10);
 }
 
 function fetchRacingSkillForDrivers(driverIds) {
@@ -301,7 +397,7 @@ function addExportButton(results, crashes) {
 ajax((page, xhr) => {
     if (page != "loader") return;
 	 const racingSkillElm = document.querySelector('.skill');
-	 await saveRacingSkill(getUserIdFromCookie(), racingSkillElm.innerText);
+	 saveRacingSkill(getUserIdFromCookie(), racingSkillElm.innerText);
 	 insertRacingSkillsIntoCurrentDriversList();
 	 // On change race tab, (re-)insert the racing skills if applicable:
      new MutationObserver(insertRacingSkillsIntoCurrentDriversList).observe(document.getElementById('racingAdditionalContainer'), {childList: true});
@@ -321,4 +417,3 @@ $("#racingupdatesnew").ready(showSpeed);
 $('#racingAdditionalContainer').ready(showPenalty);
 
 checkPenalty();
-
